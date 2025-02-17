@@ -9,13 +9,36 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~51.0.28",
-    "expo-status-bar": "~1.12.1",
-    "react": "18.2.0",
-    "react-native": "0.74.5"
+    "@react-native-async-storage/async-storage": "^1.23.1",
+    "@react-native-clipboard/clipboard": "1.11.2",
+    "@react-native-google-signin/google-signin": "^13.1.0",
+    "@react-native-picker/picker": "^2.9.0",
+    "@react-navigation/bottom-tabs": "^7.0.0",
+    "@react-navigation/native": "^7.0.9",
+    "@react-navigation/stack": "^7.0.0",
+    "axios": "^1.7.7",
+    "expo": "~52.0.35",
+    "expo-auth-session": "~6.0.2",
+    "expo-av": "~15.0.2",
+    "expo-document-picker": "~13.0.2",
+    "expo-file-system": "~18.0.10",
+    "expo-linear-gradient": "~14.0.2",
+    "expo-permissions": "^14.4.0",
+    "expo-random": "^14.0.1",
+    "expo-speech": "~13.0.1",
+    "expo-status-bar": "~2.0.1",
+    "firebase": "^11.0.1",
+    "react": "^18.3.1",
+    "react-is": "^18.3.1",
+    "react-native": "0.76.6",
+    "react-native-dotenv": "^3.4.11",
+    "react-native-elements": "^3.4.3",
+    "react-native-fbsdk-next": "^13.1.4",
+    "react-native-gesture-handler": "^2.20.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "babel-plugin-module-resolver": "^5.0.2"
   },
   "private": true
 }

@@ -1,24 +1,40 @@
 {
   "expo": {
-    "name": "Transly",
-    "slug": "Transly",
+    "name": "TranslyApp",
+    "slug": "transly-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "આ એપને ઓડિયો રેકોર્ડ કરવા માટે માઇક્રોફોન એક્સેસની જરૂર છે.",
+        "NSCameraUsageDescription": "આ એપને PDF સ્કેન કરવા માટે કેમેરા એક્સેસની જરૂર છે."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "backgroundColor": "#FFFFFF",
+        "blockedPermissions": ["android.permission.RECORD_AUDIO"]
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
