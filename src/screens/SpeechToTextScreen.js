@@ -1,339 +1,347 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-  Platform,
-  ActivityIndicator
-} from 'react-native';
-import { Text, Button, Icon } from 'react-native-elements';
-import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
-import { Ionicons } from '@expo/vector-icons';
-import { convertSpeechToText } from '../services/speechAPI';
-import { translateText } from '../services/translateAPI';
-import LanguageSelector from '../../components/LanguageSelector';
-import { recordAudio, stopRecording, transcribeAudio } from '../services/voiceTranslationService';
+import React, { useState } from 'react';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { WebView } from 'react-native-webview';
+import { 
+  Button, 
+  Text, 
+  TextInput, 
+  Card, 
+  Divider, 
+  ActivityIndicator, 
+  Chip,
+  useTheme,
+  Appbar
+} from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import axios from 'axios';
 
-export default function SpeechToTextScreen() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState(null);
-  const [transcript, setTranscript] = useState('');
+export default function SpeechTranslationApp() {
+  const { colors } = useTheme();
+  const [recognizedText, setRecognizedText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [audioPermission, setAudioPermission] = useState(false);
-  const [sourceLang, setSourceLang] = useState('en');
-  const [targetLang, setTargetLang] = useState('gu');
-  const [volume, setVolume] = useState(0);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState('es');
+  
+  // Supported languages with native names and flags
+  const languages = [
+    { code: 'en', name: 'English', nativeName: 'English', icon: '🇬🇧' },
+    { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', icon: '🇮🇳' },
+    { code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી', icon: '🇮🇳' },
+    { code: 'es', name: 'Spanish', nativeName: 'Español', icon: '🇪🇸' },
+    { code: 'fr', name: 'French', nativeName: 'Français', icon: '🇫🇷' },
+  ];
 
-  // Check microphone permission
-  useEffect(() => {
-    checkPermissions();
-    return () => {
-      if (recording) {
-        stopRecording();
-      }
-    };
-  }, []);
+  // WebView HTML for speech recognition
+  const speechRecognitionHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          margin: 0;
+          padding: 20px;
+          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+          background-color: ${colors.surface};
+        }
+        button {
+          padding: 15px 30px;
+          font-size: 18px;
+          background-color: ${colors.primary};
+          color: white;
+          border: none;
+          border-radius: 50px;
+          cursor: pointer;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+          transition: all 0.3s;
+        }
+        button:active {
+          transform: scale(0.95);
+        }
+        #status {
+          margin-top: 20px;
+          color: ${colors.onSurface};
+          font-size: 14px;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <button onclick="startRecognition()">🎤 Tap to Speak</button>
+      <div id="status">Press the button and speak clearly</div>
+      <script>
+        let recognition;
+        function startRecognition() {
+          recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+          recognition.lang = 'en-US';
+          recognition.interimResults = false;
+          recognition.continuous = false;
+          
+          recognition.onstart = function() {
+            document.getElementById('status').innerHTML = "Listening... Speak now";
+            document.querySelector('button').style.backgroundColor = '#FF3B30';
+          };
+          
+          recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            window.ReactNativeWebView.postMessage(transcript);
+            document.getElementById('status').innerHTML = "Press button to speak again";
+            document.querySelector('button').style.backgroundColor = '${colors.primary}';
+          };
+          
+          recognition.onerror = function(event) {
+            window.ReactNativeWebView.postMessage('Error: ' + event.error);
+            document.getElementById('status').innerHTML = "Error: " + event.error;
+            document.querySelector('button').style.backgroundColor = '${colors.primary}';
+          };
+          
+          recognition.onend = function() {
+            document.querySelector('button').style.backgroundColor = '${colors.primary}';
+          };
+          
+          recognition.start();
+        }
+      </script>
+    </body>
+    </html>
+  `;
 
-  const checkPermissions = async () => {
+  // Translation function using MyMemory API
+  const translateText = async () => {
+    if (!recognizedText.trim()) return;
+    
+    setIsTranslating(true);
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      setAudioPermission(status === 'granted');
-      if (status !== 'granted') {
-        Alert.alert('Error', 'Microphone access is required');
-      }
+      const response = await axios.get(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(recognizedText)}&langpair=en|${targetLanguage}`
+      );
+      setTranslatedText(response.data.responseData.translatedText || "No translation found");
     } catch (error) {
-      console.error('Permission error:', error);
-    }
-  };
-
-  // Start recording
-  const startRecording = async () => {
-    try {
-      if (!audioPermission) {
-        await checkPermissions();
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-      });
-
-      const newRecording = new Audio.Recording();
-      await newRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      
-      // Volume monitoring
-      newRecording.setOnRecordingStatusUpdate(status => {
-        setVolume(status.metering || 0);
-      });
-      
-      await newRecording.startAsync();
-      setRecording(newRecording);
-      setIsRecording(true);
-      setTranscript('');
-      setTranslatedText('');
-    } catch (error) {
-      Alert.alert('Error', 'Error starting recording');
-    }
-  };
-
-  // Stop recording
-  const stopRecording = async () => {
-    try {
-      if (!recording) return;
-
-      setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
-      
-      if (uri) {
-        processAudio(uri);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Error stopping recording');
-    }
-  };
-
-  // Process audio
-  const processAudio = async (uri) => {
-    setIsProcessing(true);
-    try {
-      // Convert audio file to base64
-      const audioBase64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Call speech-to-text API
-      const text = await convertSpeechToText(audioBase64, sourceLang);
-      setTranscript(text);
-
-      // Translate the text
-      if (text && targetLang !== sourceLang) {
-        const translated = await translateText(text, sourceLang, targetLang);
-        setTranslatedText(translated);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Error processing audio');
+      console.error('Translation error:', error);
+      setTranslatedText('Translation failed. Please try again.');
     } finally {
-      setIsProcessing(false);
+      setIsTranslating(false);
     }
   };
 
-  // Read text
-  const speakText = async (text, lang) => {
+  const copyToClipboard = async () => {
     try {
-      if (isSpeaking) {
-        await Speech.stop();
-        setIsSpeaking(false);
-        return;
-      }
-
-      setIsSpeaking(true);
-      await Speech.speak(text, {
-        language: lang,
-        onDone: () => setIsSpeaking(false),
-        onError: () => setIsSpeaking(false),
-      });
+      await Clipboard.setStringAsync(translatedText);
+      Alert.alert('Success', 'Translation copied to clipboard');
     } catch (error) {
-      Alert.alert('Error', 'Error reading text');
-      setIsSpeaking(false);
+      Alert.alert('Error', 'Failed to copy translation');
     }
   };
 
-  const handleRecord = async () => {
-    try {
-      const newRecording = await recordAudio();
-      setRecording(newRecording);
-      setIsRecording(true);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to start recording');
-      console.error('Recording error:', error);
-    }
-  };
-
-  const handleStop = async () => {
-    try {
-      const audioUri = await stopRecording(recording);
-      setIsRecording(false);
-      const text = await transcribeAudio(audioUri);
-      setTranscript(text);
-
-      const translatedText = await translateText(text, targetLang);
-      setTranslatedText(translatedText);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to process audio');
-      console.error('Error during stop or processing:', error);
-    }
+  const clearAll = () => {
+    setRecognizedText('');
+    setTranslatedText('');
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Language selection */}
-      <LanguageSelector
-        sourceLang={sourceLang}
-        targetLang={targetLang}
-        onSourceChange={setSourceLang}
-        onTargetChange={setTargetLang}
-      />
-
-      {/* Recording button */}
-      <View style={styles.recordContainer}>
-        <TouchableOpacity
-          style={[
-            styles.recordButton,
-            isRecording && styles.recordingActive,
-          ]}
-          onPress={isRecording ? handleStop : handleRecord}
-        >
-          <Ionicons
-            name={isRecording ? "stop" : "mic"}
-            size={40}
-            color="#fff"
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Professional Header */}
+      <LinearGradient
+        colors={['#4A90E2', '#2B70C9']}
+        style={styles.header}
+      >
+        <Appbar.Header style={{ backgroundColor: 'transparent', elevation: 0 }}>
+          <Appbar.Content 
+            title="Voice Translator" 
+            titleStyle={styles.headerTitle}
           />
-        </TouchableOpacity>
+        </Appbar.Header>
+      </LinearGradient>
 
-        {/* Volume indicator */}
-        {isRecording && (
-          <View style={styles.volumeContainer}>
-            {[...Array(10)].map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.volumeBar,
-                  { height: (i + 1) * 3 },
-                  volume > i * 10 && styles.volumeActive
-                ]}
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Speech Recognition Card */}
+        <Card style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Card.Content>
+            <Text variant="titleMedium" style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Speak Now
+            </Text>
+            <View style={styles.webviewContainer}>
+              <WebView
+                originWhitelist={['*']}
+                source={{ html: speechRecognitionHTML }}
+                style={styles.webview}
+                onMessage={(event) => {
+                  setRecognizedText(event.nativeEvent.data);
+                }}
               />
-            ))}
-          </View>
-        )}
-      </View>
+            </View>
+          </Card.Content>
+        </Card>
 
-      {/* Status text */}
-      <Text style={styles.statusText}>
-        {isRecording ? 'Recording...' : 'Press the button to start recording'}
-      </Text>
+        {/* Recognized Text */}
+        <Card style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Card.Content>
+            <Text variant="titleMedium" style={[styles.cardTitle, { color: colors.onSurface }]}>
+              What You Said
+            </Text>
+            <TextInput
+              mode="outlined"
+              value={recognizedText}
+              onChangeText={setRecognizedText}
+              multiline
+              style={[styles.textInput, { backgroundColor: colors.surface }]}
+              placeholder="Your speech will appear here"
+              right={
+                recognizedText ? (
+                  <TextInput.Icon 
+                    icon="close" 
+                    onPress={() => setRecognizedText('')} 
+                  />
+                ) : null
+              }
+            />
+          </Card.Content>
+        </Card>
 
-      {/* Loading indicator */}
-      {isProcessing && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Processing...</Text>
-        </View>
-      )}
-
-      {/* Transcript */}
-      {transcript && (
-        <View style={styles.resultContainer}>
-          <View style={styles.resultHeader}>
-            <Text style={styles.resultTitle}>Original Text:</Text>
-            <TouchableOpacity 
-              onPress={() => speakText(transcript, sourceLang)}
-              style={styles.speakButton}
+        {/* Language Selection */}
+        <Card style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Card.Content>
+            <Text variant="titleMedium" style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Translate To
+            </Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.languageScroll}
             >
-              <Ionicons
-                name={isSpeaking ? "volume-high" : "volume-medium"}
-                size={24}
-                color="#007AFF"
-              />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.resultText}>{transcript}</Text>
-        </View>
-      )}
+              {languages.map((lang) => (
+                <Chip
+                  key={lang.code}
+                  mode={targetLanguage === lang.code ? 'flat' : 'outlined'}
+                  selected={targetLanguage === lang.code}
+                  onPress={() => setTargetLanguage(lang.code)}
+                  style={styles.languageChip}
+                  textStyle={styles.chipText}
+                >
+                  {lang.icon} {lang.name}
+                </Chip>
+              ))}
+            </ScrollView>
+          </Card.Content>
+        </Card>
 
-      {/* Translated text */}
-      {translatedText && (
-        <View style={styles.resultContainer}>
-          <View style={styles.resultHeader}>
-            <Text style={styles.resultTitle}>Translated Text:</Text>
-            <TouchableOpacity 
-              onPress={() => speakText(translatedText, targetLang)}
-              style={styles.speakButton}
-            >
-              <Ionicons
-                name={isSpeaking ? "volume-high" : "volume-medium"}
-                size={24}
-                color="#007AFF"
+        {/* Translate Button */}
+        <Button
+          mode="contained"
+          onPress={translateText}
+          loading={isTranslating}
+          disabled={!recognizedText || isTranslating}
+          style={[styles.translateButton, { backgroundColor: colors.primary }]}
+          labelStyle={styles.buttonLabel}
+          icon="translate"
+        >
+          {isTranslating ? 'Translating...' : 'Translate'}
+        </Button>
+
+        {/* Translation Result */}
+        {translatedText ? (
+          <Card style={[styles.card, { backgroundColor: colors.surface }]}>
+            <Card.Content>
+              <View style={styles.resultHeader}>
+                <Text variant="titleMedium" style={[styles.cardTitle, { color: colors.onSurface }]}>
+                  Translation
+                </Text>
+                <View style={styles.resultActions}>
+                  <Button 
+                    icon="content-copy" 
+                    onPress={copyToClipboard}
+                    textColor={colors.primary}
+                  >
+                    Copy
+                  </Button>
+                  <Button 
+                    icon="delete" 
+                    onPress={clearAll}
+                    textColor={colors.error}
+                  >
+                    Clear
+                  </Button>
+                </View>
+              </View>
+              <TextInput
+                mode="outlined"
+                value={translatedText}
+                multiline
+                style={[styles.textInput, { backgroundColor: colors.surface }]}
+                editable={false}
               />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.resultText}>{translatedText}</Text>
-        </View>
-      )}
-    </ScrollView>
+            </Card.Content>
+          </Card>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 16,
-    backgroundColor: '#fff',
   },
-  recordContainer: {
-    alignItems: 'center',
-    marginVertical: 30,
-  },
-  recordButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
+  header: {
+    paddingBottom: 5,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  recordingActive: {
-    backgroundColor: '#FF3B30',
+  headerTitle: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 24,
   },
-  volumeContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 30,
-    marginTop: 20,
+  card: {
+    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 3,
   },
-  volumeBar: {
-    width: 3,
-    backgroundColor: '#ddd',
-    marginHorizontal: 1,
-    borderRadius: 1,
+  cardTitle: {
+    marginBottom: 12,
+    fontWeight: 'bold',
   },
-  volumeActive: {
-    backgroundColor: '#007AFF',
-  },
-  statusText: {
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 20,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-  },
-  resultContainer: {
-    marginBottom: 20,
-    padding: 16,
-    backgroundColor: '#f8f8f8',
+  webviewContainer: {
+    height: 180,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    overflow: 'hidden',
+  },
+  webview: {
+    flex: 1,
+  },
+  textInput: {
+    backgroundColor: 'transparent',
+  },
+  languageScroll: {
+    paddingVertical: 4,
+  },
+  languageChip: {
+    marginRight: 8,
+    marginBottom: 8,
+    height: 40,
+  },
+  chipText: {
+    fontSize: 14,
+  },
+  translateButton: {
+    marginVertical: 16,
+    borderRadius: 8,
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    paddingVertical: 4,
   },
   resultHeader: {
     flexDirection: 'row',
@@ -341,17 +349,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  speakButton: {
-    padding: 8,
-  },
-  resultText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 24,
+  resultActions: {
+    flexDirection: 'row',
   },
 });

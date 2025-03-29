@@ -16,28 +16,45 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      [
+        "expo-document-picker",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "આ એપને ઓડિયો રેકોર્ડ કરવા માટે માઇક્રોફોન એક્સેસની જરૂર છે.",
-        "NSCameraUsageDescription": "આ એપને PDF સ્કેન કરવા માટે કેમેરા એક્સેસની જરૂર છે."
+        "NSMicrophoneUsageDescription": "This app requires access to the microphone for speech recognition.",
+        "NSCameraUsageDescription": "This app requires access to your camera to scan PDFs."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF",
-        "blockedPermissions": ["android.permission.RECORD_AUDIO"]
+        "blockedPermissions": [
+          "android.permission.RECORD_AUDIO"
+        ]
       },
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "CAMERA"
-      ]
+      ],
+      "package": "com.akshar_kacha.translyapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6e5a8b7f-7cd8-443b-a40b-c3c7e3ea6236"
+      },
+      "newArchEnabled": true
     }
   }
 }
